@@ -1,0 +1,8 @@
+{:paths ["src"]
+ :deps {org.babashka/cli {:mvn/version "0.8.61"}}
+ :tasks
+ {:override-builtin true
+  run {:doc "Detect code smells and suggest refactoring"
+       :task (apply (requiring-resolve 'code_smell_detector.core/-main) *command-line-args*)}
+  scan {:doc "Scan current directory"
+        :task (apply (requiring-resolve 'code_smell_detector.core/-main) ["--dir" "."])}}}
