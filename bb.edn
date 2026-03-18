@@ -3,6 +3,13 @@
  :tasks
  {:override-builtin true
   run {:doc "Detect code smells and suggest refactoring"
-       :task (apply (requiring-resolve 'code_smell_detector.core/-main) *command-line-args*)}
+       :task (apply (requiring-resolve 'code-smell-detector.core/-main) *command-line-args*)}
   scan {:doc "Scan current directory"
-        :task (apply (requiring-resolve 'code_smell_detector.core/-main) ["--dir" "."])}}}
+        :task (apply (requiring-resolve 'code-smell-detector.core/-main) ["--dir" "."])}
+  test {:doc "Run tests"
+        :extra-paths ["test"]
+        :task (do
+                (require 'code-smell-detector.core-test)
+                (let [run-tests (requiring-resolve 'clojure.test/run-tests)
+                      {:keys [fail error]} (run-tests 'code-smell-detector.core-test)]
+                  (System/exit (if (zero? (+ fail error)) 0 1))))}}}
