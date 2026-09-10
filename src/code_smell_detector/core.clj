@@ -67,9 +67,9 @@
       (- idx start)
       (let [line (nth lines idx)
             stripped (-> line
-                        (str/replace #"\"(?:[^\"\\\\]|\\\\.)*\"" "")
-                        (str/replace #"'(?:[^'\\\\]|\\\\.)*'" "")
-                        (str/replace #"//.*$" ""))
+                         (str/replace #"\"(?:[^\"\\\\]|\\\\.)*\"" "")
+                         (str/replace #"'(?:[^'\\\\]|\\\\.)*'" "")
+                         (str/replace #"//.*$" ""))
             opens (count (re-seq #"\{" stripped))
             closes (count (re-seq #"\}" stripped))
             new-depth (+ depth opens (- closes))
@@ -114,9 +114,9 @@
          results
          (let [line (nth lines idx)
                stripped (-> line
-                           (strip-comments lang)
-                           (str/replace #"\"[^\"]*\"" "")
-                           (str/replace #"'[^']*'" ""))
+                            (strip-comments lang)
+                            (str/replace #"\"[^\"]*\"" "")
+                            (str/replace #"'[^']*'" ""))
                opens (count (re-seq #"\{" stripped))
                closes (count (re-seq #"\}" stripped))
                peak-depth (+ depth opens)
@@ -297,27 +297,27 @@
   (if (empty? findings)
     "No code smells found."
     (str/join "\n"
-      (concat
-        [(format "Found %d code smell(s):\n" (count findings))]
-        (map (fn [{:keys [file line severity smell message]}]
-               (format "  %s:%d [%s] (%s) %s"
-                       file line (str/upper-case severity) smell message))
-             findings)
-        [""
-         (format "Summary: %d high, %d medium, %d low"
-                 (count (filter #(= (:severity %) "high") findings))
-                 (count (filter #(= (:severity %) "medium") findings))
-                 (count (filter #(= (:severity %) "low") findings)))]))))
+              (concat
+               [(format "Found %d code smell(s):\n" (count findings))]
+               (map (fn [{:keys [file line severity smell message]}]
+                      (format "  %s:%d [%s] (%s) %s"
+                              file line (str/upper-case severity) smell message))
+                    findings)
+               [""
+                (format "Summary: %d high, %d medium, %d low"
+                        (count (filter #(= (:severity %) "high") findings))
+                        (count (filter #(= (:severity %) "medium") findings))
+                        (count (filter #(= (:severity %) "low") findings)))]))))
 
 (defn format-json [findings]
   (json/generate-string
-    {:total (count findings)
-     :by-severity {:high (count (filter #(= (:severity %) "high") findings))
-                   :medium (count (filter #(= (:severity %) "medium") findings))
-                   :low (count (filter #(= (:severity %) "low") findings))}
-     :by-smell (frequencies (map :smell findings))
-     :findings findings}
-    {:pretty true}))
+   {:total (count findings)
+    :by-severity {:high (count (filter #(= (:severity %) "high") findings))
+                  :medium (count (filter #(= (:severity %) "medium") findings))
+                  :low (count (filter #(= (:severity %) "low") findings))}
+    :by-smell (frequencies (map :smell findings))
+    :findings findings}
+   {:pretty true}))
 
 ;; --- CLI ---
 
@@ -346,10 +346,10 @@
         findings (->> (scan-directory (:dir opts) opts)
                       (filter #(>= (get severity-rank (:severity %) 0) min-sev)))]
     (println
-      (case (:format opts)
-        "json" (format-json findings)
-        "edn" (pr-str findings)
-        (format-text findings)))
+     (case (:format opts)
+       "json" (format-json findings)
+       "edn" (pr-str findings)
+       (format-text findings)))
     (System/exit (if (seq findings) 1 0))))
 
 (when (= *file* (System/getProperty "babashka.file"))
