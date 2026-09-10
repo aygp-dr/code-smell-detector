@@ -1,8 +1,10 @@
 (ns code-smell-detector.core
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [cheshire.core :as json]))
+            [cheshire.core :as json]
+            [code-smell-detector.specs :as specs]))
 
 ;; --- Utility ---
 
@@ -10,6 +12,13 @@
   (let [name (str (fs/file-name path))]
     (when-let [idx (str/last-index-of name ".")]
       (subs name (inc idx)))))
+
+(s/fdef file-extension
+  :args (s/cat :path ::specs/path-like)
+  :ret (s/nilable string?)
+  :fn (fn [{{[_ path] :path} :args ret :ret}]
+        (or (nil? ret)
+            (str/ends-with? (str (fs/file-name path)) (str "." ret)))))
 
 (def ext->lang
   {"py" "python" "pyw" "python"
@@ -24,6 +33,12 @@
 (defn indentation-level [line]
   (when-not (str/blank? line)
     (- (count line) (count (str/triml line)))))
+
+(s/fdef indentation-level
+  :args (s/cat :line string?)
+  :ret (s/nilable nat-int?)
+  :fn (fn [{{:keys [line]} :args ret :ret}]
+        (= (nil? ret) (str/blank? line))))
 
 (defn- strip-comments [line lang]
   (cond
@@ -67,9 +82,9 @@
       (- idx start)
       (let [line (nth lines idx)
             stripped (-> line
-                        (str/replace #"\"(?:[^\"\\\\]|\\\\.)*\"" "")
-                        (str/replace #"'(?:[^'\\\\]|\\\\.)*'" "")
-                        (str/replace #"//.*$" ""))
+                         (str/replace #"\"(?:[^\"\\\\]|\\\\.)*\"" "")
+                         (str/replace #"'(?:[^'\\\\]|\\\\.)*'" "")
+                         (str/replace #"//.*$" ""))
             opens (count (re-seq #"\{" stripped))
             closes (count (re-seq #"\}" stripped))
             new-depth (+ depth opens (- closes))
@@ -93,6 +108,11 @@
                        :message (format "Method '%s' is %d lines (threshold: %d)"
                                         name length threshold)}))))))))
 
+(s/fdef detect-long-methods
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
+
 ;; --- Detector: Deep Nesting (>4 levels) ---
 
 (defn detect-deep-nesting
@@ -114,9 +134,9 @@
          results
          (let [line (nth lines idx)
                stripped (-> line
-                           (strip-comments lang)
-                           (str/replace #"\"[^\"]*\"" "")
-                           (str/replace #"'[^']*'" ""))
+                            (strip-comments lang)
+                            (str/replace #"\"[^\"]*\"" "")
+                            (str/replace #"'[^']*'" ""))
                opens (count (re-seq #"\{" stripped))
                closes (count (re-seq #"\}" stripped))
                peak-depth (+ depth opens)
@@ -129,6 +149,11 @@
                                                     peak-depth threshold)})
                     results))))))))
 
+(s/fdef detect-deep-nesting
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
+
 ;; --- Detector: God Class (>300 lines) ---
 
 (defn detect-god-class
@@ -137,6 +162,11 @@
    (when (> (count lines) threshold)
      [{:file file :line 1 :smell "god-class" :severity "high"
        :message (format "File has %d lines (threshold: %d)" (count lines) threshold)}])))
+
+(s/fdef detect-god-class
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
 
 ;; --- Detector: Long Parameter List (>5 params) ---
 
@@ -167,6 +197,11 @@
                          :message (format "Function '%s' has %d parameters (threshold: %d)"
                                           name param-count threshold)})))))))))
 
+(s/fdef detect-long-parameter-list
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
+
 ;; --- Detector: Duplicate Code ---
 
 (defn detect-duplicate-code
@@ -192,6 +227,11 @@
                                         (inc first-line))})
                (swap! seen assoc content start-line))))
          @results)))))
+
+(s/fdef detect-duplicate-code
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
 
 ;; --- Detector: Magic Numbers ---
 
@@ -221,6 +261,11 @@
                     (when (seq nums)
                       {:file file :line (inc idx) :smell "magic-number" :severity "low"
                        :message (format "Magic number(s): %s" (str/join ", " nums))}))))))))
+
+(s/fdef detect-magic-numbers
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
 
 ;; --- Detector: Dead Code (unreachable after return) ---
 
@@ -253,6 +298,11 @@
                       {:file file :line (+ idx 2) :smell "dead-code" :severity "high"
                        :message (format "Unreachable code after '%s'" (str/trim line))}))))))))
 
+(s/fdef detect-dead-code
+  :args ::specs/detector-args
+  :ret (s/nilable ::specs/findings)
+  :fn specs/findings-within-input?)
+
 ;; --- Scanning ---
 
 (defn scan-file [path]
@@ -275,6 +325,10 @@
           [{:file (str path) :line 0 :smell "error" :severity "low"
             :message (str "Could not scan: " (.getMessage e))}])))))
 
+(s/fdef scan-file
+  :args (s/cat :path ::specs/path-like)
+  :ret (s/nilable ::specs/findings))
+
 (defn scan-directory [dir _opts]
   (let [extensions (set (keys ext->lang))
         files (->> (fs/glob dir "**")
@@ -289,6 +343,10 @@
          (mapcat scan-file)
          (sort-by (juxt :file :line)))))
 
+(s/fdef scan-directory
+  :args (s/cat :dir ::specs/path-like :opts map?)
+  :ret ::specs/findings)
+
 ;; --- Formatting ---
 
 (def severity-rank {"high" 3 "medium" 2 "low" 1})
@@ -297,27 +355,37 @@
   (if (empty? findings)
     "No code smells found."
     (str/join "\n"
-      (concat
-        [(format "Found %d code smell(s):\n" (count findings))]
-        (map (fn [{:keys [file line severity smell message]}]
-               (format "  %s:%d [%s] (%s) %s"
-                       file line (str/upper-case severity) smell message))
-             findings)
-        [""
-         (format "Summary: %d high, %d medium, %d low"
-                 (count (filter #(= (:severity %) "high") findings))
-                 (count (filter #(= (:severity %) "medium") findings))
-                 (count (filter #(= (:severity %) "low") findings)))]))))
+              (concat
+               [(format "Found %d code smell(s):\n" (count findings))]
+               (map (fn [{:keys [file line severity smell message]}]
+                      (format "  %s:%d [%s] (%s) %s"
+                              file line (str/upper-case severity) smell message))
+                    findings)
+               [""
+                (format "Summary: %d high, %d medium, %d low"
+                        (count (filter #(= (:severity %) "high") findings))
+                        (count (filter #(= (:severity %) "medium") findings))
+                        (count (filter #(= (:severity %) "low") findings)))]))))
+
+(s/fdef format-text
+  :args (s/cat :findings ::specs/findings)
+  :ret string?)
 
 (defn format-json [findings]
   (json/generate-string
-    {:total (count findings)
-     :by-severity {:high (count (filter #(= (:severity %) "high") findings))
-                   :medium (count (filter #(= (:severity %) "medium") findings))
-                   :low (count (filter #(= (:severity %) "low") findings))}
-     :by-smell (frequencies (map :smell findings))
-     :findings findings}
-    {:pretty true}))
+   {:total (count findings)
+    :by-severity {:high (count (filter #(= (:severity %) "high") findings))
+                  :medium (count (filter #(= (:severity %) "medium") findings))
+                  :low (count (filter #(= (:severity %) "low") findings))}
+    :by-smell (frequencies (map :smell findings))
+    :findings findings}
+   {:pretty true}))
+
+(s/fdef format-json
+  :args (s/cat :findings ::specs/findings)
+  :ret string?
+  :fn (fn [{{:keys [findings]} :args ret :ret}]
+        (= (count findings) (get (json/parse-string ret) "total"))))
 
 ;; --- CLI ---
 
@@ -346,11 +414,14 @@
         findings (->> (scan-directory (:dir opts) opts)
                       (filter #(>= (get severity-rank (:severity %) 0) min-sev)))]
     (println
-      (case (:format opts)
-        "json" (format-json findings)
-        "edn" (pr-str findings)
-        (format-text findings)))
+     (case (:format opts)
+       "json" (format-json findings)
+       "edn" (pr-str findings)
+       (format-text findings)))
     (System/exit (if (seq findings) 1 0))))
+
+(s/fdef -main
+  :args (s/* string?))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))
