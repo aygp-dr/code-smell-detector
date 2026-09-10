@@ -24,7 +24,7 @@
 (s/def ::lines (s/coll-of ::line-text :kind vector? :gen-max 40))
 
 ;; A relative or absolute file path, as a string or java.nio.file.Path.
-(def ^:private gen-path-string
+(defn- gen-path-string []
   (gen/fmap (fn [[dirs base ext]]
               (str/join "/" (conj dirs (cond-> base ext (str "." ext)))))
             (gen/tuple (gen/vector (gen/not-empty (gen/string-alphanumeric)) 0 3)
@@ -33,11 +33,11 @@
                                     (gen/elements ["py" "js" "go" "rs" "rb" "java" "clj" "txt"])
                                     (gen/string-alphanumeric)]))))
 
-(s/def ::path-string (s/with-gen (s/and string? seq) (constantly gen-path-string)))
+(s/def ::path-string (s/with-gen (s/and string? seq) gen-path-string))
 (s/def ::path-like
   (s/with-gen (s/or :string ::path-string
                     :path #(instance? java.nio.file.Path %))
-    (constantly gen-path-string)))
+    gen-path-string))
 
 ;; Detector options (each detector reads the key it cares about).
 (s/def ::threshold (s/int-in 0 64))
